@@ -1,105 +1,103 @@
-## Graph-Based RAG Project Documentation
+# Agentic Project Manager 🤖📊
 
-### 1. Project Overview
-This project implements a **Retrieval-Augmented Generation (RAG)** system using a **knowledge graph** architecture. It combines vector databases (Milvus) with graph-based knowledge representation to improve information retrieval and generation accuracy.
+An AI-powered project management tool that automates software planning, requirements analysis, and resource allocation. Built with **LangGraph**, **FastAPI**, and **React**, it uses a multi-agent system to turn a simple project brief into a fully prioritized and assigned Kanban board.
 
-### 2. Key Components
+## 🚀 Features
 
-#### 2.1 Core Files
-- `build_knowledge_graph.py` - Main script for creating and managing the knowledge graph
-- `milvus_db.py` - Handles Milvus vector database interactions
-- `retrieve.py` - Implements the retrieval-augmented generation workflow
-- `prompt_library.py` - Stores prompt templates for different tasks
-- `requirements.txt` - Python dependencies
-- `.env` - Environment variables (e.g., Milvus connection details)
+* **Multi-Agent Architecture:** Orchestrates specialized agents (Business Analyst, Planner, Allocator) to break down complex tasks.
+* **Automated User Stories:** Converts high-level project briefs into detailed user stories with acceptance criteria and technical notes.
+* **Intelligent Allocation:** Matches tasks to team members based on their specific skills and roles using a local LLM (Gemma 3).
+* **Human-in-the-Loop:** Interactive review phase allows users to modify priorities and stories before final allocation.
+* **Real-Time Streaming:** Uses Server-Sent Events (SSE) to provide live feedback on agent thought processes and state updates.
+* **State Persistence:** Maintains context across the entire workflow (Planning → Review → Allocation) to ensure seamless execution.
 
-#### 2.2 Directory Structure
-```
-graph_based_RAG/
-├── build_knowledge_graph.py
-├── milvus_db.py
-├── retrieve.py
-├── prompt_library.py
-├── README.md
-├── requirements.txt
-└── .env
-```
+## 🛠️ Tech Stack
 
-### 3. Setup & Configuration
+### Backend
+* **Python 3.11+**
+* **FastAPI:** High-performance API for handling SSE streams and agent requests.
+* **LangGraph:** For stateful, cyclic multi-agent orchestration.
+* **LangChain:** For LLM interaction and prompt management.
+* **Ollama:** Local LLM runner (using `gemma3:27b`).
 
-#### 3.1 Prerequisites
-- Python 3.10+
-- Milvus vector database
-- PostgreSQL (if using graph database)
+### Frontend
+* **React 18** (Vite)
+* **TypeScript**
+* **Tailwind CSS** & **Shadcn/UI**
+* **Zustand:** For global state management.
+* **Lucide React:** For icons.
 
-#### 3.2 Installation
-1. Clone repository
+## ⚙️ Installation
+
+### Prerequisites
+* Node.js 18+
+* Python 3.11+
+* [Ollama](https://ollama.com/) installed and running.
+
+### 1. Backend Setup
+
 ```bash
-git clone https://github.com/your-repo.git
-```
-2. Create and activate virtual environment
-```bash
+# Navigate to backend directory
+cd backend
+
+# Create virtual environment
 python -m venv venv
-source venv/bin/activate  # Linux/Mac
-venv\Scripts\activate  # Windows
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install fastapi uvicorn langgraph langchain-ollama python-dotenv
+
+# Start the API server (Runs on port 8200)
+python api.py
 ```
-3. Install dependencies
+
+
+*Note: Ensure your api.py is configured to run on port 8200...*.
+
+### 2. Frontend Setup
+
 ```bash
-pip install -r requirements.txt
+# Navigate to frontend directory
+cd frontend
+
+# Install dependencies
+npm install
+
+# Start the development server
+npm run dev
+
 ```
+## 📖 Usage
 
-#### 3.3 Configuration
-1. Create `.env` file:
-```
-MILVUS_HOST=127.0.0.1
-MILVUS_PORT=19530
-POSTGRES_HOST=127.0.0.1
-POSTGRES_PORT=5432
-```
-2. Update `milvus_db.py` with your Milvus connection details
+1.  **Define Project & Team:**
+    * Enter a project brief (e.g., "Build a CRM for a dental clinic").
+    * Add team members to the roster with their roles (Backend, Frontend, QA) and skills.
 
-### 4. Usage
+2.  **Run Agents:**
+    * Click **"Start Analysis"**.
+    * Watch as the **Business Analyst Agent** breaks down the brief into modules.
+    * The **Planner Agent** then generates detailed user stories for each module.
 
-#### 4.1 Basic Workflow
-1. Build knowledge graph
-```bash
-python build_knowledge_graph.py --input data/sample_data.json
-```
-2. Start retrieval-augmented generation
-```bash
-python retrieve.py --query "What is the capital of France?"
-```
+3.  **Review & Prioritize:**
+    * The system pauses for **Human Review**.
+    * Verify the generated stories in the Prioritization Grid.
+    * Edit priorities or remove tasks if needed.
 
-#### 4.2 Advanced Features
-- Multiple retrieval strategies (vector search, graph traversal)
-- Prompt templating system
-- Metric tracking for evaluation
+4.  **Allocate Resources:**
+    * Click **"Approve & Allocate"**.
+    * The **Allocator Agent** assigns tasks to the best-fit team members based on their skill sets.
+    * View the final results on the **Kanban Dashboard**.
 
-### 5. File Descriptions
+## 🧠 Architecture Highlights
 
-#### `build_knowledge_graph.py`
-- Creates graph nodes/edges from raw data
-- Handles:
-  - Text preprocessing
-  - Entity recognition
-  - Relationship mapping
+* **Robust JSON Parsing:** Implements Regex-based cleaning to handle LLM "chat" output, ensuring strict JSON formats for the frontend.
+* **Session Management:** Solved the "Amnesia Bug" by capturing and passing a unique `session_id` between the frontend and backend, allowing the graph to resume execution exactly where it paused.
+* **Data Transformation:** Automatically flattens nested Python dictionaries into frontend-friendly objects for the UI components.
 
-#### `milvus_db.py`
-- Manages vector database operations
-- Features:
-  - Embedding storage
-  - Vector similarity search
-  - Data indexing
+## 🤝 Contributing
 
-#### `retrieve.py`
-- Implements RAG workflow
-- Process:
-  - Query understanding
-  - Knowledge graph traversal
-  - Answer generation
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-### 6. Contribution Guidelines
-- Follow PEP8 style guide
-- Write tests for new features
-- Document API endpoints
-- Update README.md for new components
+## 📄 License
+
+This project is licensed under the MIT License.
