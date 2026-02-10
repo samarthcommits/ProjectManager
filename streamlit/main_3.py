@@ -1,0 +1,256 @@
+import streamlit as st
+import pandas as pd
+import requests
+import json
+import uuid
+
+# --- CONFIGURATION ---
+API_URL = "http://127.0.0.1:8200"
+
+st.set_page_config(page_title="Agentic PM (Client)", layout="wide", page_icon="⚡")
+
+# --- SESSION STATE ---
+if "session_id" not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())
+if "step" not in st.session_state:
+    st.session_state.step = "INPUT"
+if "ba_summary" not in st.session_state:
+    st.session_state.ba_summary = ""
+if "raw_stories" not in st.session_state:
+    st.session_state.raw_stories = []
+if "final_assignments" not in st.session_state:
+    st.session_state.final_assignments = {}
+
+# --- CSS STYLING ---
+st.markdown("""
+<style>
+    .ticket-card {
+        background-color: white;
+        border-left: 5px solid #4b88ff;
+        padding: 20px;
+        margin-bottom: 15px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }
+    .ticket-header { display: flex; justify-content: space-between; align-items: center; }
+    .ticket-title { margin: 0; color: #333; font-size: 1.1rem; font-weight: 600; }
+    .priority-badge { font-size: 0.75rem; padding: 4px 8px; border-radius: 4px; font-weight: bold; background-color: #eee; }
+    .ticket-body { color: #555; margin-top: 10px; font-size: 0.95rem; }
+</style>
+""", unsafe_allow_html=True)
+
+# --- SIDEBAR ---
+with st.sidebar:
+    st.header("🔌 API Connection")
+    api_status = st.empty()
+    try:
+        requests.get(f"{API_URL}/docs", timeout=1)
+        api_status.success("Backend Online")
+    except:
+        api_status.error("Backend Offline")
+
+    st.divider()
+    
+    st.header("1. Project Brief")
+    default_brief = "Build PalTech Prospect Portal, a secure platform for high-value clients."
+    project_brief = st.text_area("Description", value=default_brief, height=150)
+    
+    st.header("2. Team Roster")
+    # Default Roster
+    default_roster = [
+        {"name": "Alice", "role": "backend_dev", "skills": "Python, API, SQL"},
+        {"name": "Bob", "role": "frontend_dev", "skills": "React, CSS, UI/UX"},
+        {"name": "Charlie", "role": "qa", "skills": "Testing, Automation"}
+    ]
+    roster_df = st.data_editor(
+        pd.DataFrame(default_roster), 
+        num_rows="dynamic",
+        use_container_width=True,
+        hide_index=True
+    )
+
+    if st.button("🔄 New Project"):
+        st.session_state.step = "INPUT"
+        st.session_state.session_id = str(uuid.uuid4())
+        st.rerun()
+
+# --- MAIN LOGIC ---
+
+# --- HELPER: STREAM HANDLER ---
+def handle_streaming_response(response, status_container):
+    final_data = None
+    
+    # chunk_size=None lets requests decide, but iterating line by line 
+    # usually flushes correctly if the server yields correctly.
+    for line in response.iter_lines(): 
+        if line:
+            decoded_line = line.decode('utf-8')
+            if decoded_line.startswith("data: "):
+                event_json = decoded_line[6:]
+                try:
+                    event = json.loads(event_json)
+                    
+                    if event["type"] == "status":
+                        # Force a UI update immediately
+                        status_container.update(label=event["msg"], state="running")
+                    
+                    elif event["type"] == "result":
+                        final_data = event["data"]
+                    
+                    elif event["type"] == "error":
+                        st.error(f"Backend Error: {event['msg']}")
+                        return None
+                        
+                except json.JSONDecodeError:
+                    continue
+    
+    return final_data
+
+# STAGE 1: INPUT
+if st.session_state.step == "INPUT":
+    st.title("🚀 Start Analysis")
+    
+    if st.button("Generate Plan", type="primary"):
+        # Create a container for real-time logs
+        status_box = st.status("Initializing Agents...", expanded=True)
+        
+        try:
+            payload = {
+                "project_brief": project_brief,
+                "roster": roster_df.to_dict(orient="records"),
+                "session_id": st.session_state.session_id
+            }
+            
+            # Request with stream=True
+            response = requests.post(f"{API_URL}/plan", json=payload, stream=True)
+            
+            # Process Stream
+            data = handle_streaming_response(response, status_box)
+            
+            if data:
+                status_box.update(label="Analysis Complete!", state="complete", expanded=False)
+                st.session_state.ba_summary = data["ba_summary"]
+                st.session_state.raw_stories = data["stories"]
+                st.session_state.step = "REVIEW"
+                st.rerun()
+                
+        except Exception as e:
+            st.error(f"Connection Error: {e}")
+# STAGE 2: REVIEW
+elif st.session_state.step == "REVIEW":
+    st.title("⚖️ Review & Prioritize")
+    st.info("Review the user stories generated by the backend before allocation.")
+    
+    with st.expander("📄 View BA Summary", expanded=False):
+        st.markdown(st.session_state.ba_summary)
+
+    # 1. Prepare DataFrame for Editor
+    # We add an 'id' column to map back to the real object list
+    display_data = []
+    for idx, s in enumerate(st.session_state.raw_stories):
+        story_obj = s["story"]
+        title = story_obj.get("ticket_title", "Untitled") if isinstance(story_obj, dict) else str(story_obj)[:50]
+        
+        display_data.append({
+            "id": idx,  # CRITICAL: This allows us to look up the real dict later
+            "Module": s.get("module", "General"),
+            "Role": s.get("role", "Unknown"),
+            "Title": title,
+            "Priority": s.get("priority", "medium")
+        })
+    
+    edited_df = st.data_editor(
+        pd.DataFrame(display_data),
+        column_config={
+            "id": None, # Hide the ID column
+            "Priority": st.column_config.SelectboxColumn("Priority", options=["critical", "high", "medium", "low"])
+        },
+        use_container_width=True,
+        hide_index=True
+    )
+    
+    if st.button("✅ Approve & Allocate"):
+        status_box = st.status("Allocating Resources...", expanded=True)
+        
+        try:
+            # Reconstruct Payload (Same logic as before)
+            approved_stories = []
+            for idx, row in edited_df.iterrows():
+                # (Use your ID lookup logic here)
+                # ...
+                # Assuming simple reconstruction for brevity of snippet:
+                original = st.session_state.raw_stories[idx] # Ensure your display_data uses index correctly
+                original["priority"] = row["Priority"]
+                approved_stories.append(original)
+            
+            payload = {
+                "session_id": st.session_state.session_id,
+                "approved_stories": approved_stories
+            }
+            
+            # Streaming Request
+            res = requests.post(f"{API_URL}/allocate", json=payload, stream=True)
+            
+            # Process Stream
+            data = handle_streaming_response(res, status_box)
+            
+            if data:
+                status_box.update(label="Allocation Complete!", state="complete", expanded=False)
+                st.session_state.final_assignments = data["assigned_tasks"]
+                st.session_state.step = "RESULT"
+                st.rerun()
+                
+        except Exception as e:
+            st.error(f"Connection Error: {e}")
+
+# STAGE 3: RESULT
+elif st.session_state.step == "RESULT":
+    # st.balloons()
+    st.title("🎯 Final Sprint Board")
+    
+    assignments = st.session_state.final_assignments
+    resources = list(assignments.keys())
+    
+    # Horizontal Radio Selection
+    selected_resource = st.radio("Select Team Member", resources, horizontal=True)
+    st.divider()
+    
+    if selected_resource:
+        tickets = assignments[selected_resource]
+        
+        if not tickets:
+            st.info("No tickets assigned.")
+        else:
+            # Metrics Row
+            c1, c2 = st.columns(2)
+            c1.metric("Tickets", len(tickets))
+            c2.metric("Status", "Ready")
+            
+            # Render Tickets
+            for t in tickets:
+                if isinstance(t, dict):
+                    title = t.get('ticket_title', 'Untitled')
+                    story = t.get('user_story', '')
+                    ac = t.get('acceptance_criteria', [])
+                    tech = t.get('technical_notes', '')
+                    priority = t.get('priority', 'MEDIUM').upper()
+                    
+                    # Styled Card
+                    st.markdown(f"""
+                    <div class="ticket-card">
+                        <div class="ticket-header">
+                            <h4 class="ticket-title">{title}</h4>
+                            <span class="priority-badge">{priority}</span>
+                        </div>
+                        <div class="ticket-body">{story}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    with st.expander("Show Specs"):
+                        col_a, col_b = st.columns(2)
+                        with col_a:
+                            st.markdown("**Acceptance Criteria**")
+                            for item in ac: st.markdown(f"- {item}")
+                        with col_b:
+                            st.markdown("**Technical Notes**")
+                            st.info(tech if tech else "None")
